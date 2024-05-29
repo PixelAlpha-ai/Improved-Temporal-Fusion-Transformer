@@ -7,9 +7,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 from models import Informer
+import matplotlib.pyplot as plt
 
 # Define parameters
-train_size = 0.85
+train_size = 0.7  # Proportion of data to use for training
+test_size = 0.15  # Proportion of data to use for the OOS test set
+val_size = 0.15  # Proportion of data to use for validation
 x_stand = StandardScaler()
 y_stand = StandardScaler()
 s_len = 64
@@ -18,7 +21,7 @@ batch_size = 32
 device = "cuda"
 lr = 5e-5
 epochs = 100
-model_save_path = './trained_informer_model.pth'  # Path to save the model
+model_save_path = 'trained_models/'  # Directory to save the model
 
 
 def create_data(datas):
@@ -34,9 +37,8 @@ def create_data(datas):
     return values, labels
 
 
-def read_data():
-    datas = pd.read_csv("./datas/Bitcoin_4h.csv")
-    # datas = pd.read_csv("./datas/Amazon.csv")
+def read_data(name_data_file):
+    datas = pd.read_csv(f"datas\\{name_data_file}.csv")
     datas.pop("Adj Close")
     datas.fillna(0)
     xs = datas.values[:, [2, 3, 4, 5]]
@@ -45,9 +47,13 @@ def read_data():
     y_stand.fit(ys[:, None])
     values, labels = create_data(datas)
 
-    train_x, test_x, train_y, test_y = train_test_split(values, labels, train_size=train_size)
-    return train_x, test_x, train_y, test_y
+    # Split off the OOS test set first
+    train_val_x, oos_x, train_val_y, oos_y = train_test_split(values, labels, test_size=test_size)
 
+    # Split the remaining data into train and validation sets
+    train_x, val_x, train_y, val_y = train_test_split(train_val_x, train_val_y, train_size=train_size/(train_size + val_size))
+
+    return train_x, val_x, train_y, val_y, oos_x, oos_y
 
 class AmaData(Dataset):
     def __init__(self, values, labels):
@@ -77,12 +83,14 @@ class AmaData(Dataset):
         return value, label, value_t, label_t
 
 
-def train():
-    train_x, test_x, train_y, test_y = read_data()
+def train_model(name_data_file):
+    train_x, val_x, train_y, val_y, oos_x, oos_y = read_data(name_data_file)
     train_data = AmaData(train_x, train_y)
     train_data = DataLoader(train_data, shuffle=True, batch_size=batch_size)
-    test_data = AmaData(test_x, test_y)
-    test_data = DataLoader(test_data, shuffle=True, batch_size=batch_size)
+    val_data = AmaData(val_x, val_y)
+    val_data = DataLoader(val_data, shuffle=True, batch_size=batch_size)
+    oos_data = AmaData(oos_x, oos_y)
+    oos_data = DataLoader(oos_data, shuffle=False, batch_size=batch_size)
 
     model = Informer()
     model.to(device)
@@ -106,7 +114,7 @@ def train():
         model.eval()
         val_loss = 0.0
         with torch.no_grad():
-            pbar = tqdm(test_data, desc=f"Validation Epoch {epoch + 1}")
+            pbar = tqdm(val_data, desc=f"Validation Epoch {epoch + 1}")
             for step, (x, y, xt, yt) in enumerate(pbar):
                 mask = torch.zeros_like(y)[:, pre_len:].to(device)
                 x, y, xt, yt = x.to(device), y.to(device), xt.to(device), yt.to(device)
@@ -115,13 +123,62 @@ def train():
                 loss = loss_fc(logits, y[:, pre_len:])
                 val_loss += loss.item()
                 pbar.set_postfix(loss=loss.item())
-        val_loss /= len(test_data)
+        val_loss /= len(val_data)
         print(f"Validation Loss after Epoch {epoch + 1}: {val_loss}")
 
     print("Training Complete. Saving the model...")
-    torch.save(model.state_dict(), model_save_path)
-    print(f"Model saved to {model_save_path}")
+
+    save_path = model_save_path + f'model_{name_data_file}.pth'
+    torch.save(model.state_dict(), save_path)
+    print(f"Model saved to {save_path}")
+
+
+def infer_model(name_data_file):
+    _, _, _, _, oos_x, oos_y = read_data(name_data_file)
+    oos_data = AmaData(oos_x, oos_y)
+    oos_data = DataLoader(oos_data, shuffle=False, batch_size=batch_size)
+
+    model = Informer()
+    model.load_state_dict(torch.load(model_save_path + f'model_{name_data_file}.pth'))
+    model.to(device)
+
+    loss_fc = nn.MSELoss()
+    model.eval()
+    oos_loss = 0.0
+    actuals, predictions = [], []
+    with torch.no_grad():
+        for x, y, xt, yt in oos_data:
+            mask = torch.zeros_like(y)[:, pre_len:].to(device)
+            x, y, xt, yt = x.to(device), y.to(device), xt.to(device), yt.to(device)
+            dec_y = torch.cat([y[:, :pre_len], mask], dim=1)
+            logits = model(x, xt, dec_y, yt)
+            loss = loss_fc(logits, y[:, pre_len:])
+            oos_loss += loss.item()
+            actuals.append(y.cpu().numpy())
+            predictions.append(logits.cpu().numpy())
+    oos_loss /= len(oos_data)
+    print(f"OOS Test Loss: {oos_loss}")
+
+    # Convert lists to arrays for easier handling
+    actuals = np.concatenate(actuals, axis=0)
+    predictions = np.concatenate(predictions, axis=0)
+
+    # Plotting the results
+    plt.figure(figsize=(12, 6))
+    plt.plot(actuals[:, 0], label='Actual')
+    plt.plot(predictions[:, 0], label='Predicted')
+    plt.title('Out-of-Sample Predictions vs Actuals')
+    plt.xlabel('Time Step')
+    plt.ylabel('Price')
+    plt.legend()
+    plt.show()
 
 
 if __name__ == '__main__':
-    train()
+    name_data_file = 'Amazon'
+
+    # Uncomment the next line to train the model
+    train_model(name_data_file)
+
+    # Run inference with the pre-trained model
+    infer_model(name_data_file)
