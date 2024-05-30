@@ -9,7 +9,7 @@ from tqdm import tqdm
 from models import Informer
 import matplotlib.pyplot as plt
 
-# Define parameters
+# Define global parameters
 train_size = 0.7  # Proportion of data to use for training
 test_size = 0.15  # Proportion of data to use for the OOS test set
 val_size = 0.15  # Proportion of data to use for validation
@@ -83,14 +83,14 @@ class AmaData(Dataset):
         return value, label, value_t, label_t
 
 
-def train_model(name_data_file):
-    train_x, val_x, train_y, val_y, oos_x, oos_y = read_data(name_data_file)
+def train_model(name_data_file, train_x, train_y, val_x, val_y):
+    # train_x, val_x, train_y, val_y, oos_x, oos_y = read_data(name_data_file)
     train_data = AmaData(train_x, train_y)
     train_data = DataLoader(train_data, shuffle=True, batch_size=batch_size)
     val_data = AmaData(val_x, val_y)
     val_data = DataLoader(val_data, shuffle=True, batch_size=batch_size)
-    oos_data = AmaData(oos_x, oos_y)
-    oos_data = DataLoader(oos_data, shuffle=False, batch_size=batch_size)
+    # oos_data = AmaData(oos_x, oos_y)
+    # oos_data = DataLoader(oos_data, shuffle=False, batch_size=batch_size)
 
     model = Informer()
     model.to(device)
@@ -129,12 +129,12 @@ def train_model(name_data_file):
     print("Training Complete. Saving the model...")
 
     save_path = model_save_path + f'model_{name_data_file}.pth'
+
     torch.save(model.state_dict(), save_path)
     print(f"Model saved to {save_path}")
 
 
-def infer_model(name_data_file):
-    _, _, _, _, oos_x, oos_y = read_data(name_data_file)
+def infer_model(name_data_file, oos_x, oos_y):
     oos_data = AmaData(oos_x, oos_y)
     oos_data = DataLoader(oos_data, shuffle=False, batch_size=batch_size)
 
@@ -177,8 +177,11 @@ def infer_model(name_data_file):
 if __name__ == '__main__':
     name_data_file = 'Amazon'
 
+    # Read the data
+    train_x, val_x, train_y, val_y, oos_x, oos_y = read_data(name_data_file)
+
     # Uncomment the next line to train the model
-    train_model(name_data_file)
+    # train_model(name_data_file, train_x, train_y, val_x, val_y)
 
     # Run inference with the pre-trained model
-    infer_model(name_data_file)
+    infer_model(name_data_file, oos_x, oos_y)
