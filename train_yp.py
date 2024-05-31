@@ -41,7 +41,10 @@ def create_data(datas):
 
 def read_data(name_data_file):
     datas = pd.read_csv(f"datas\\{name_data_file}.csv")
-    datas.pop("Adj Close")
+
+    # only keep the columns we need
+    datas = datas[["Date", "Open", "High", "Low", "Close", "Volume"]]
+    # datas.pop("Adj Close")
     datas.fillna(0)
     xs = datas.values[:, [2, 3, 4, 5]]
     ys = datas.values[:, 1]
@@ -150,6 +153,7 @@ def infer_model(name_data_file, oos_x, oos_y):
     oos_loss = 0.0
     actuals, predictions = [], []
     actual_trends, predicted_trends = [], []
+    actual_diffs, predicted_diffs = [], []  # Initialize lists for differences
 
     with torch.no_grad():
         for x, y, xt, yt in oos_data:
@@ -169,7 +173,7 @@ def infer_model(name_data_file, oos_x, oos_y):
             actuals.append(actuals_batch_inv)
             predictions.append(predictions_batch_inv)
 
-            # Calculate the differences for binary trend prediction
+            # Calculate the differences for binary trend prediction and differences
             for i in range(x.size(0)):
                 # Last known price from the decoder initializer
                 last_known_price = y[i, pre_len-1, 0].cpu().numpy()
@@ -186,20 +190,15 @@ def infer_model(name_data_file, oos_x, oos_y):
                 actual_diff = last_actual_price - last_known_price_inv
 
                 # Save the actual differences and binary trends
+                actual_diffs.append(actual_diff)
+                predicted_diffs.append(predicted_diff)
                 actual_trends.append(1 if actual_diff > 0 else 0)
                 predicted_trends.append(1 if predicted_diff > 0 else 0)
 
     oos_loss /= len(oos_data)
     print(f"OOS Test Loss: {oos_loss}")
 
-    # Convert lists to arrays for easier handling
-    actuals = np.concatenate(actuals, axis=0)
-    predictions = np.concatenate(predictions, axis=0)
-
     # Scatter plot for the differences
-    actual_diffs = np.array([a[-1, 0] - y_stand.inverse_transform(a[0].reshape(-1, 1)).item() for a in actuals])
-    predicted_diffs = np.array([p[-1, 0] - y_stand.inverse_transform(a[0].reshape(-1, 1)).item() for p, a in zip(predictions, actuals)])
-
     plt.figure(figsize=(10, 6))
     plt.scatter(actual_diffs, predicted_diffs)
     plt.xlabel('Actual Price Difference')
@@ -218,7 +217,6 @@ def infer_model(name_data_file, oos_x, oos_y):
 
     # Print classification report
     print(classification_report(actual_trends, predicted_trends, target_names=['Down', 'Up']))
-
 
     # Calculate the average loss over all batches
     oos_loss /= len(oos_data)
@@ -241,14 +239,15 @@ def infer_model(name_data_file, oos_x, oos_y):
 
 
 if __name__ == '__main__':
-    name_data_file = 'Amazon'
+    # name_data_file = 'Amazon'
+    name_data_file = 'BTCUSDT_1h'
+    name_model_file = name_data_file
 
     # Read the data
     train_x, val_x, train_y, val_y, oos_x, oos_y = read_data(name_data_file)
 
     # Uncomment the next line to train the model
-    # train_model(name_data_file, train_x, train_y, val_x, val_y)
+    train_model(name_data_file, train_x, train_y, val_x, val_y)
 
     # Run inference with the pre-trained model
-    infer_model(name_data_file, oos_x, oos_y)
-
+    infer_model(name_model_file, oos_x, oos_y)
