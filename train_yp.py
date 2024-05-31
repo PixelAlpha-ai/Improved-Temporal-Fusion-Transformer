@@ -20,11 +20,11 @@ y_stand = StandardScaler()
 s_len = 64
 pre_len = 5
 batch_size = 32
-device = "cuda"
+device = "cuda" if torch.cuda.is_available() else "cpu"
 lr = 5e-5
 epochs = 100
+patience = 10  # Early stopping patience
 model_save_path = 'trained_models/'  # Directory to save the model
-
 
 def create_data(datas):
     values = []
@@ -38,14 +38,12 @@ def create_data(datas):
         labels.append(label)
     return values, labels
 
-
 def read_data(name_data_file):
     datas = pd.read_csv(f"datas\\{name_data_file}.csv")
 
     # only keep the columns we need
     datas = datas[["Date", "Open", "High", "Low", "Close", "Volume"]]
-    # datas.pop("Adj Close")
-    datas.fillna(0)
+    datas.fillna(0, inplace=True)
     xs = datas.values[:, [2, 3, 4, 5]]
     ys = datas.values[:, 1]
     x_stand.fit(xs)
@@ -87,20 +85,19 @@ class AmaData(Dataset):
         label = np.float32(label)
         return value, label, value_t, label_t
 
-
 def train_model(name_data_file, train_x, train_y, val_x, val_y):
-    # train_x, val_x, train_y, val_y, oos_x, oos_y = read_data(name_data_file)
     train_data = AmaData(train_x, train_y)
     train_data = DataLoader(train_data, shuffle=True, batch_size=batch_size)
     val_data = AmaData(val_x, val_y)
     val_data = DataLoader(val_data, shuffle=True, batch_size=batch_size)
-    # oos_data = AmaData(oos_x, oos_y)
-    # oos_data = DataLoader(oos_data, shuffle=False, batch_size=batch_size)
 
     model = Informer()
     model.to(device)
     loss_fc = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    best_val_loss = float('inf')
+    patience_counter = 0
 
     for epoch in range(epochs):
         model.train()
@@ -131,14 +128,21 @@ def train_model(name_data_file, train_x, train_y, val_x, val_y):
         val_loss /= len(val_data)
         print(f"Validation Loss after Epoch {epoch + 1}: {val_loss}")
 
-    print("Training Complete. Saving the model...")
+        # Check for early stopping
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            patience_counter = 0
+            # Save the model if it has the best validation loss so far
+            save_path = model_save_path + f'model_{name_data_file}.pth'
+            torch.save(model.state_dict(), save_path)
+            print(f"Model saved to {save_path}")
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                print("Early stopping triggered.")
+                break
 
-    save_path = model_save_path + f'model_{name_data_file}.pth'
-
-    torch.save(model.state_dict(), save_path)
-    print(f"Model saved to {save_path}")
-
-
+    print("Training Complete.")
 
 def infer_model(name_data_file, oos_x, oos_y):
     oos_data = AmaData(oos_x, oos_y)
@@ -234,14 +238,13 @@ def infer_model(name_data_file, oos_x, oos_y):
     plt.title('Out-of-Sample Predictions vs Actuals')
     plt.xlabel('Time Step')
     plt.ylabel('Price')
+
     plt.legend()
     plt.show()
 
 
 if __name__ == '__main__':
-    # name_data_file = 'Amazon'
-    name_data_file = 'BTCUSDT_1h'
-    name_model_file = name_data_file
+    name_data_file = 'BTCUSDT_4h'
 
     # Read the data
     train_x, val_x, train_y, val_y, oos_x, oos_y = read_data(name_data_file)
@@ -250,4 +253,4 @@ if __name__ == '__main__':
     train_model(name_data_file, train_x, train_y, val_x, val_y)
 
     # Run inference with the pre-trained model
-    infer_model(name_model_file, oos_x, oos_y)
+    infer_model(name_data_file, oos_x, oos_y)
