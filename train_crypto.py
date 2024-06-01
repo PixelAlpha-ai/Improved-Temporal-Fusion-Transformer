@@ -209,8 +209,7 @@ def infer_model(name_data_file, oos_x, oos_y):
     plt.xlabel('Actual Price Difference')
     plt.ylabel('Predicted Price Difference')
     plt.title('Scatter Plot of Actual vs. Predicted Price Differences')
-    plt.show()
-    plt.savefig(f"results\\Diff_{name_data_file}_{pd.Timestamp.now().date()}.png")
+    plt.savefig(f"results\\Diff_{name_data_file}.png")
 
     # Confusion matrix for the trend prediction
     cm = confusion_matrix(actual_trends, predicted_trends)
@@ -219,25 +218,23 @@ def infer_model(name_data_file, oos_x, oos_y):
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm_df, annot=True, fmt='d', cmap='Blues')
     plt.title('Confusion Matrix for Trend Prediction')
-    plt.show()
-    plt.savefig(f"results\\CM_{name_data_file}_{pd.Timestamp.now().date()}.png")
+    plt.savefig(f"results\\CM_{name_data_file}.png")
 
     # Print classification report
     print(classification_report(actual_trends, predicted_trends, target_names=['Down', 'Up']))
 
-    # Convert lists of actual and predicted values to numpy arrays for easier handling
-    actuals = np.concatenate(actuals, axis=0)
-    predictions = np.concatenate(predictions, axis=0)
-
-    # Scatter plot for the actual prices and predicted prices
-    plt.figure(figsize=(12, 6))
-    plt.scatter(actuals[:, 0], predictions[:, 0], alpha=0.6)
-    plt.xlabel('Actual Prices')
-    plt.ylabel('Predicted Prices')
-    plt.title('Scatter Plot of Actual vs. Predicted Prices')
-    plt.show()
-    plt.savefig(f"results\\Price_{name_data_file}_{pd.Timestamp.now().date()}.png")
-
+    # # Convert lists of actual and predicted values to numpy arrays for easier handling
+    # actuals = np.concatenate(actuals, axis=0)
+    # predictions = np.concatenate(predictions, axis=0)
+    #
+    # # Scatter plot for the actual prices and predicted prices
+    # plt.figure(figsize=(12, 6))
+    # plt.scatter(actuals[:, 0], predictions[:, 0], alpha=0.6)
+    # plt.xlabel('Actual Prices')
+    # plt.ylabel('Predicted Prices')
+    # plt.title('Scatter Plot of Actual vs. Predicted Prices')
+    # plt.savefig(f"results\\Price_{name_data_file}_{pd.Timestamp.now().date()}.png")
+    #
 
 if __name__ == '__main__':
     # Import the list of symbols for US stock and crypto
