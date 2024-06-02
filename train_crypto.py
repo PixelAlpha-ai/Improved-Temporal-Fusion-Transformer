@@ -33,8 +33,8 @@ def create_data(datas):
     lens = datas.shape[0]
     datas = datas.values
     for index in range(0, lens - pre_len - s_len):
-        value = datas[index:index + s_len, [0, 2, 3, 4, 5]]
-        label = datas[index + s_len - pre_len:index + s_len + pre_len, [0, 1]]
+        value = datas[index:index + s_len, [0, 1, 2, 3, 4]]
+        label = datas[index + s_len - pre_len:index + s_len + pre_len, [0, 4]]
         values.append(value)
         labels.append(label)
     return values, labels
@@ -45,8 +45,10 @@ def read_data(name_data_file):
     # only keep the columns we need
     datas = datas[["Date", "Open", "High", "Low", "Close", "Volume"]]
     datas.fillna(0, inplace=True)
-    xs = datas.loc[:, ['High', 'Low', 'Close', 'Volume']].values
-    ys = datas.loc[:, 'Close'].values
+    xs = datas.values[:, [1, 2, 3, 4]]
+    ys = datas.values[:, 4]
+    # xs = datas.loc[:, ['High', 'Low', 'Close', 'Volume']].values
+    # ys = datas.loc[:, 'Close'].values
     x_stand.fit(xs)
     y_stand.fit(ys[:, None])
     values, labels = create_data(datas)
@@ -237,11 +239,13 @@ def infer_model(name_data_file, oos_x, oos_y):
     #
 
 if __name__ == '__main__':
+
     # Import the list of symbols for US stock and crypto
     from config import crypto_symbols
 
     # Train the US stocks
     for name_data_file in crypto_symbols:
+
         # Read the data
         train_x, val_x, train_y, val_y, oos_x, oos_y = read_data(name_data_file)
 

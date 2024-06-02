@@ -20,6 +20,8 @@ lr = 5e-5
 epochs = 100
 
 
+
+
 def create_data(datas):
 
     values = []
@@ -38,10 +40,10 @@ def create_data(datas):
 
 
 
+
 def read_data():
 
-    datas = pd.read_csv("./datas/Bitcoin_4h.csv")
-    # datas = pd.read_csv("./datas/Amazon.csv")
+    datas = pd.read_csv("./datas/Amazon.csv")
     datas.pop("Adj Close")
     datas.fillna(0)
 
@@ -132,7 +134,6 @@ def train():
             pbar.set_description(s)
 
         model.eval()
-
         with torch.no_grad():
 
             pbar = tqdm(test_data)
