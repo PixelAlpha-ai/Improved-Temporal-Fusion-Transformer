@@ -45,8 +45,8 @@ def read_data(name_data_file):
     # only keep the columns we need
     datas = datas[["Date", "Open", "High", "Low", "Close", "Volume"]]
     datas.fillna(0, inplace=True)
-    xs = datas.values[:, [2, 3, 4, 5]]
-    ys = datas.values[:, 1]
+    xs = datas.loc[:, ['High', 'Low', 'Close', 'Volume']].values
+    ys = datas.loc[:, 'Close'].values
     x_stand.fit(xs)
     y_stand.fit(ys[:, None])
     values, labels = create_data(datas)
