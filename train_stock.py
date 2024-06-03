@@ -9,6 +9,7 @@ from tqdm import tqdm
 from models import Informer
 import matplotlib.pyplot as plt
 import seaborn as sns
+import os
 from sklearn.metrics import confusion_matrix, classification_report
 
 # Define global parameters
@@ -24,8 +25,33 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 lr = 5e-5
 epochs = 100
 patience = 10  # Early stopping patience
-path_training_data = 'datas/'  # Directory where the training data is stored
+path_training_data = 'datas/'
 model_save_path = 'trained_models/'  # Directory to save the model
+
+
+def save_oos_data(oos_x, oos_y, name_data_file, save_directory):
+    # Create the directory if it does not exist
+    if not os.path.exists(save_directory):
+        os.makedirs(save_directory)
+
+    # Iterate through each sample in the OOS data
+    for i, (sample_x, sample_y) in enumerate(zip(oos_x, oos_y)):
+        # Convert the sample features (numpy array) to a DataFrame
+        sample_x_df = pd.DataFrame(sample_x, columns=['Open', 'High', 'Low', 'Close', 'Volume'])
+
+        # Convert the sample labels (numpy array) to a DataFrame
+        sample_y_df = pd.DataFrame(sample_y,
+                                   columns=['Open', 'Close'])  # Adjust columns based on your specific structure
+
+        # Save the DataFrame to a CSV file
+        file_name_x = os.path.join(save_directory, f"oos_x_{name_data_file}_{i}.csv")
+        sample_x_df.to_csv(file_name_x, index=False)
+
+        file_name_y = os.path.join(save_directory, f"oos_y_{name_data_file}_{i}.csv")
+        sample_y_df.to_csv(file_name_y, index=False)
+
+
+        print(f"Saved: {file_name_x}")
 
 def create_data(datas):
     values = []
@@ -42,13 +68,11 @@ def create_data(datas):
 def read_data(name_data_file):
     datas = pd.read_csv(f"{path_training_data}\\{name_data_file}.csv")
 
-    # only keep the columns we need
+    # Process and split data as before
     datas = datas[["Date", "Open", "High", "Low", "Close", "Volume"]]
     datas.fillna(0, inplace=True)
     xs = datas.values[:, [1, 2, 3, 4]]
     ys = datas.values[:, 4]
-    # xs = datas.loc[:, ['High', 'Low', 'Close', 'Volume']].values
-    # ys = datas.loc[:, 'Close'].values
     x_stand.fit(xs)
     y_stand.fit(ys[:, None])
     values, labels = create_data(datas)
@@ -58,6 +82,12 @@ def read_data(name_data_file):
 
     # Split the remaining data into train and validation sets
     train_x, val_x, train_y, val_y = train_test_split(train_val_x, train_val_y, train_size=train_size/(train_size + val_size))
+
+    # Define the directory to save the OOS data
+    oos_save_directory = os.path.join(path_training_data, 'oos_data')
+
+    # Save OOS data to the new directory
+    save_oos_data(oos_x, oos_y, name_data_file, oos_save_directory)
 
     return train_x, val_x, train_y, val_y, oos_x, oos_y
 
