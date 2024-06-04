@@ -10,6 +10,7 @@ from models import Informer
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
+import joblib
 from sklearn.metrics import confusion_matrix, classification_report
 
 # Define global parameters
@@ -29,7 +30,18 @@ path_training_data = 'datas/'
 model_save_path = 'trained_models/'  # Directory to save the model
 
 
+def save_scalers(x_scaler, y_scaler, path):
+    joblib.dump(x_scaler, os.path.join(path, 'x_scaler.pkl'))
+    joblib.dump(y_scaler, os.path.join(path, 'y_scaler.pkl'))
+
+def load_scalers(path):
+    x_scaler = joblib.load(os.path.join(path, 'x_scaler.pkl'))
+    y_scaler = joblib.load(os.path.join(path, 'y_scaler.pkl'))
+    return x_scaler, y_scaler
+
+
 def save_oos_data(oos_x, oos_y, name_data_file, save_directory):
+
     # Create the directory if it does not exist
     if not os.path.exists(save_directory):
         os.makedirs(save_directory)
@@ -66,6 +78,7 @@ def create_data(datas):
     return values, labels
 
 def read_data(name_data_file):
+
     datas = pd.read_csv(f"{path_training_data}\\{name_data_file}.csv")
 
     # Process and split data as before
@@ -76,6 +89,9 @@ def read_data(name_data_file):
     x_stand.fit(xs)
     y_stand.fit(ys[:, None])
     values, labels = create_data(datas)
+
+    # Save the scalers
+    save_scalers(x_stand, y_stand, path_training_data)
 
     # Split off the OOS test set first
     train_val_x, oos_x, train_val_y, oos_y = train_test_split(values, labels, test_size=test_size)
@@ -92,8 +108,9 @@ def read_data(name_data_file):
     return train_x, val_x, train_y, val_y, oos_x, oos_y
 
 class AmaData(Dataset):
-    def __init__(self, values, labels):
+    def __init__(self, values, labels, scaler_path):
         self.values, self.labels = values, labels
+        self.x_stand, self.y_stand = load_scalers(scaler_path)
 
     def __len__(self):
         return len(self.values)
@@ -112,16 +129,17 @@ class AmaData(Dataset):
         label = self.labels[item]
         value_t = self.create_time(value)
         label_t = self.create_time(label)
-        value = x_stand.transform(value[:, 1:])
-        label = y_stand.transform(label[:, 1][:, None])
+        value = self.x_stand.transform(value[:, 1:])
+        label = self.y_stand.transform(label[:, 1][:, None])
         value = np.float32(value)
         label = np.float32(label)
         return value, label, value_t, label_t
 
 def train_model(name_data_file, train_x, train_y, val_x, val_y):
-    train_data = AmaData(train_x, train_y)
+    scaler_path = path_training_data
+    train_data = AmaData(train_x, train_y, scaler_path)
     train_data = DataLoader(train_data, shuffle=True, batch_size=batch_size)
-    val_data = AmaData(val_x, val_y)
+    val_data = AmaData(val_x, val_y, scaler_path)
     val_data = DataLoader(val_data, shuffle=True, batch_size=batch_size)
 
     model = Informer()
@@ -178,7 +196,8 @@ def train_model(name_data_file, train_x, train_y, val_x, val_y):
     print("Training Complete.")
 
 def infer_model(name_data_file, oos_x, oos_y):
-    oos_data = AmaData(oos_x, oos_y)
+    scaler_path = path_training_data
+    oos_data = AmaData(oos_x, oos_y, scaler_path)
     oos_data = DataLoader(oos_data, shuffle=False, batch_size=batch_size)
 
     model = Informer()
@@ -255,18 +274,6 @@ def infer_model(name_data_file, oos_x, oos_y):
     # Print classification report
     print(classification_report(actual_trends, predicted_trends, target_names=['Down', 'Up']))
 
-    # # Convert lists of actual and predicted values to numpy arrays for easier handling
-    # actuals = np.concatenate(actuals, axis=0)
-    # predictions = np.concatenate(predictions, axis=0)
-    #
-    # # Scatter plot for the actual prices and predicted prices
-    # plt.figure(figsize=(12, 6))
-    # plt.scatter(actuals[:, 0], predictions[:, 0], alpha=0.6)
-    # plt.xlabel('Actual Prices')
-    # plt.ylabel('Predicted Prices')
-    # plt.title('Scatter Plot of Actual vs. Predicted Prices')
-    # plt.savefig(f"results\\Price_{name_data_file}_{pd.Timestamp.now().date()}.png")
-    #
 
 if __name__ == '__main__':
 
