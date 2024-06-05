@@ -27,8 +27,6 @@ path_training_data = 'datas/'
 path_testing_data = 'datas_test/'
 model_save_path = 'trained_models/'  # Directory to save the model
 
-
-
 def load_scalers(path, name_symbol):
     x_scaler = joblib.load(os.path.join(path, f'x_scaler_{name_symbol}.pkl'))
     y_scaler = joblib.load(os.path.join(path, f'y_scaler_{name_symbol}.pkl'))
@@ -50,15 +48,15 @@ def save_oos_data(oos_x, oos_y, name_symbol, save_directory):
         sample_y_df = pd.DataFrame(sample_y,
                                    columns=['Open', 'Close'])  # Adjust columns based on your specific structure
 
-        # Save the DataFrame to a CSV file
-        file_name_x = os.path.join(save_directory, f"oos_x_{name_symbol}_{i}.csv")
-        sample_x_df.to_csv(file_name_x, index=False)
+        # # Save the DataFrame to a CSV file
+        # file_name_x = os.path.join(save_directory, f"oos_x_{name_symbol}_{i}.csv")
+        # sample_x_df.to_csv(file_name_x, index=False)
+        #
+        # file_name_y = os.path.join(save_directory, f"oos_y_{name_symbol}_{i}.csv")
+        # sample_y_df.to_csv(file_name_y, index=False)
 
-        file_name_y = os.path.join(save_directory, f"oos_y_{name_symbol}_{i}.csv")
-        sample_y_df.to_csv(file_name_y, index=False)
 
-
-        print(f"Saved: {file_name_x}")
+        # print(f"Saved: {file_name_x}")
 
 
 def create_data(datas):
@@ -103,10 +101,10 @@ def read_data(name_symbol, test_date):
     oos_x, oos_y, oos_y_fake = values, labels, labels_fake
 
     # Define the directory to save the OOS data
-    oos_save_directory = os.path.join(path_training_data, 'oos_data')
+    # oos_save_directory = os.path.join(path_training_data, 'oos_data')
 
     # Save OOS data to the new directory
-    save_oos_data(oos_x, oos_y, name_symbol, oos_save_directory)
+    # save_oos_data(oos_x, oos_y, name_symbol, oos_save_directory)
 
     return oos_x, oos_y, oos_y_fake
 
@@ -165,13 +163,19 @@ def infer_model(name_symbol, oos_x, oos_y):
             loss = loss_fc(logits, y[:, pre_len:])
             oos_loss += loss.item()
 
+            # # Inverse transform the normalized values of x back to the original scale
+            # x = x.cpu().numpy()
+            # x_inv = x_stand.inverse_transform(x.reshape(-1, 4)).reshape(x.shape)
+
             # Inverse transform the normalized values back to the original scale
-            actuals_batch = y[:, pre_len:].cpu().numpy()
+            # actuals_batch = y[:, pre_len:].cpu().numpy()
+            # actuals_batch = y[:, :pre_len].cpu().numpy()
+            # actuals_batch_inv = y_stand.inverse_transform(actuals_batch.reshape(-1, 1)).reshape(actuals_batch.shape)
             predictions_batch = logits.cpu().numpy()
-            actuals_batch_inv = y_stand.inverse_transform(actuals_batch.reshape(-1, 1)).reshape(actuals_batch.shape)
+
             predictions_batch_inv = y_stand.inverse_transform(predictions_batch.reshape(-1, 1)).reshape(predictions_batch.shape)
 
-            actuals.append(actuals_batch_inv)
+            # actuals.append(actuals_batch_inv)
             predictions.append(predictions_batch_inv)
 
             # Calculate the differences for binary trend prediction and differences
@@ -185,19 +189,17 @@ def infer_model(name_symbol, oos_x, oos_y):
                 last_predicted_price = predictions_batch_inv[i, -1, 0]
 
                 # Last actual price from the label
-                last_actual_price = actuals_batch_inv[i, -1, 0]
+                # last_actual_price = actuals_batch_inv[i, -1, 0]
 
                 # Calculate the differences
                 predicted_diff = last_predicted_price - last_known_price_inv
-                actual_diff = last_actual_price - last_known_price_inv
+                # actual_diff = last_actual_price - last_known_price_inv
 
                 # Save the actual differences and binary trends
-                actual_diffs.append(actual_diff)
                 predicted_diffs.append(predicted_diff)
-                actual_trends.append(1 if actual_diff > 0 else 0)
                 predicted_trends.append(1 if predicted_diff > 0 else 0)
 
-    oos_loss /= len(oos_data)
+    # oos_loss /= len(oos_data)
     # print(f"OOS Test Loss: {oos_loss}")
     #
     # # Scatter plot for the differences
@@ -225,49 +227,87 @@ def infer_model(name_symbol, oos_x, oos_y):
 
 if __name__ == '__main__':
 
-    # # Import the list of symbols for US stock and crypto
-    # from config import us_stock_symbols
-    #
-    # # Train the US stocks
-    # for name_symbol in us_stock_symbols:
-    #
-    #     # Read the data
-    #     train_x, val_x, train_y, val_y, oos_x, oos_y = read_data(name_symbol)
-    #
-    #     # Run inference with the pre-trained model
-    #     infer_model(name_symbol, oos_x, oos_y)
+    # generate a list of all dates, in string format, from test_date_start to test_date_end
+    test_date_start = '2023-01-01'
+    test_date_end = '2024-05-31'
+    list_test_dates = pd.date_range(start=test_date_start, end=test_date_end).strftime('%Y-%m-%d').tolist()
 
-    name_symbol = 'SPY'
-    test_date = '2024-05-20'
+    # Import the list of symbols for US stock and crypto
+    from config import us_stock_symbols
 
-    # Read the data
-    oos_x, oos_y, oos_y_fake = read_data(name_symbol, test_date)
+    # Train the US stocks
+    for name_symbol in us_stock_symbols:
 
-    # Run inference with the pre-trained model
-    oos_y_pred = infer_model(name_symbol, oos_x, oos_y_fake)
+        # create a list to save data for 2D scatter plot of predicted price change vs actual price change
+        list_actual_diffs = []
+        list_predicted_diffs = []
 
-    # Flatten oos_y_pred for plotting
-    oos_y_pred = np.array(oos_y_pred).flatten()
+        for test_date in list_test_dates:
 
-    # Select the relevant portion of oos_y
-    actual_values = oos_y[0][-pre_len:, 1].astype(float)
 
-    # add the last known price to the actual_values
-    last_known_price = oos_y[0][pre_len-1, 1]
-    actual_values = np.append(last_known_price, actual_values)
+            # use try/catch in case certain dates failed
+            try:
+                # Read the data
+                oos_x, oos_y, oos_y_fake = read_data(name_symbol, test_date)
 
-    # add the last known price to the oos_y_pred
-    oos_y_pred = np.append(last_known_price, oos_y_pred)
+                # Run inference with the pre-trained model
+                oos_y_pred_with_fake_oos_y = infer_model(name_symbol, oos_x, oos_y_fake)
+                # oos_y_pred_with_real_oos_y = infer_model(name_symbol, oos_x, oos_y)
 
-    # Plot the actual and predicted values
-    plt.figure(figsize=(10, 6))
-    plt.plot(actual_values, label='Actual')
-    plt.plot(oos_y_pred, label='Predicted')
-    plt.xlabel('Time Step')
-    plt.ylabel('Close Price')
-    plt.title('Actual vs. Predicted Close Price')
-    plt.legend()
+                # choose which oos_y_pred to use
+                oos_y_pred = oos_y_pred_with_fake_oos_y
+                # oos_y_pred = oos_y_pred_with_real_oos_y
 
-    # Save the figure with the date as the name postfix
-    plt.savefig(f"results\\{name_symbol}_{test_date}.png")
-    plt.show()
+                # Flatten oos_y_pred for plotting
+                oos_y_pred = np.array(oos_y_pred).flatten()
+
+                # Select the relevant portion of oos_y
+                actual_values = oos_y[0][-pre_len:, 1].astype(float)
+
+                # add the last known price to the actual_values
+                last_known_price = oos_y[0][pre_len-1, 1]
+                actual_values = np.append(last_known_price, actual_values)
+
+                # add the last known price to the oos_y_pred
+                oos_y_pred = np.append(last_known_price, oos_y_pred)
+
+                # Calculate the differences for binary trend prediction and differences
+                diffs_actual = actual_values[-1] - last_known_price
+                diffs_predicted = oos_y_pred[-1] - last_known_price
+                list_actual_diffs.append(diffs_actual)
+                list_predicted_diffs.append(diffs_predicted)
+
+                # Plot the actual and predicted values
+                plt.figure(figsize=(10, 6))
+                plt.plot(actual_values, label='Actual')
+                plt.plot(oos_y_pred, label='Predicted')
+                plt.xlabel('Time Step')
+                plt.ylabel('Close Price')
+                plt.title(f'{test_date} Actual vs. Predicted Close Price')
+                plt.legend()
+
+                # Save the figure with the date as the name postfix
+                plt.savefig(f"results\\{name_symbol}_{test_date}.png")
+                # plt.show()
+                plt.close()
+
+            except Exception as e:
+                error_msg = f"Error processing {test_date}: {str(e)}"
+                print(error_msg)
+
+        ### postprocessing
+
+        # Scatter plot for the differences, set the x and y limits symmetric around zero
+        max_x = max(max(list_actual_diffs), max((list_predicted_diffs)))
+        min_x = min(min(list_actual_diffs), min((list_predicted_diffs)))
+        max_abs = max(abs(max_x), abs(min_x))
+
+        plt.figure(figsize=(10, 6))
+        plt.scatter(list_actual_diffs, list_predicted_diffs)
+        plt.xlabel('Actual Price Difference')
+        plt.ylabel('Predicted Price Difference')
+        plt.title(f'{test_date}_{name_symbol} Actual vs. Predicted Price Differences, {pre_len} days')
+        plt.xlim(-max_abs, max_abs)
+        plt.ylim(-max_abs, max_abs)
+        plt.savefig(f"results\\Diff_{name_symbol}.png")
+        plt.show()

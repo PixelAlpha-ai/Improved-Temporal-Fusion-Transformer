@@ -9,6 +9,8 @@ from tqdm import tqdm
 from models import Informer
 import matplotlib.pyplot as plt
 import seaborn as sns
+import os
+import joblib
 from sklearn.metrics import confusion_matrix, classification_report
 
 # Define global parameters
@@ -24,8 +26,42 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 lr = 5e-5
 epochs = 100
 patience = 10  # Early stopping patience
-path_training_data = 'datas/'  # Directory where the training data is stored
+path_training_data = 'datas/'
 model_save_path = 'trained_models/'  # Directory to save the model
+
+
+def save_scalers(x_scaler, y_scaler, name_symbol, path):
+    joblib.dump(x_scaler, os.path.join(path, f'x_scaler_{name_symbol}.pkl'))
+    joblib.dump(y_scaler, os.path.join(path, f'y_scaler_{name_symbol}.pkl'))
+
+def load_scalers(path, name_symbol):
+    x_scaler = joblib.load(os.path.join(path, f'x_scaler_{name_symbol}.pkl'))
+    y_scaler = joblib.load(os.path.join(path, f'y_scaler_{name_symbol}.pkl'))
+    return x_scaler, y_scaler
+
+
+def save_oos_data(oos_x, oos_y, name_symbol, save_directory):
+
+    # Create the directory if it does not exist
+    if not os.path.exists(save_directory):
+        os.makedirs(save_directory)
+
+    # Iterate through each sample in the OOS data
+    for i, (sample_x, sample_y) in enumerate(zip(oos_x, oos_y)):
+        # Convert the sample features (numpy array) to a DataFrame
+        sample_x_df = pd.DataFrame(sample_x, columns=['Open', 'High', 'Low', 'Close', 'Volume'])
+
+        # Convert the sample labels (numpy array) to a DataFrame
+        sample_y_df = pd.DataFrame(sample_y,
+                                   columns=['Open', 'Close'])  # Adjust columns based on your specific structure
+
+        # Save the DataFrame to a CSV file
+        # file_name_x = os.path.join(save_directory, f"oos_x_{name_symbol}_{i}.csv")
+        # sample_x_df.to_csv(file_name_x, index=False)
+        #
+        # file_name_y = os.path.join(save_directory, f"oos_y_{name_symbol}_{i}.csv")
+        # sample_y_df.to_csv(file_name_y, index=False)
+        # print(f"Saved: {file_name_x}")
 
 def create_data(datas):
     values = []
@@ -39,19 +75,21 @@ def create_data(datas):
         labels.append(label)
     return values, labels
 
-def read_data(name_data_file):
-    datas = pd.read_csv(f"{path_training_data}\\{name_data_file}.csv")
+def read_data(name_symbol):
 
-    # only keep the columns we need
+    datas = pd.read_csv(f"{path_training_data}\\{name_symbol}.csv")
+
+    # Process and split data as before
     datas = datas[["Date", "Open", "High", "Low", "Close", "Volume"]]
     datas.fillna(0, inplace=True)
     xs = datas.values[:, [1, 2, 3, 4]]
     ys = datas.values[:, 4]
-    # xs = datas.loc[:, ['High', 'Low', 'Close', 'Volume']].values
-    # ys = datas.loc[:, 'Close'].values
     x_stand.fit(xs)
     y_stand.fit(ys[:, None])
     values, labels = create_data(datas)
+
+    # Save the scalers
+    save_scalers(x_stand, y_stand, name_symbol, path_training_data)
 
     # Split off the OOS test set first
     train_val_x, oos_x, train_val_y, oos_y = train_test_split(values, labels, test_size=test_size)
@@ -59,11 +97,18 @@ def read_data(name_data_file):
     # Split the remaining data into train and validation sets
     train_x, val_x, train_y, val_y = train_test_split(train_val_x, train_val_y, train_size=train_size/(train_size + val_size))
 
+    # Define the directory to save the OOS data
+    oos_save_directory = os.path.join(path_training_data, 'oos_data')
+
+    # Save OOS data to the new directory
+    # save_oos_data(oos_x, oos_y, name_symbol, oos_save_directory)
+
     return train_x, val_x, train_y, val_y, oos_x, oos_y
 
 class AmaData(Dataset):
-    def __init__(self, values, labels):
+    def __init__(self, values, labels, name_symbol, scaler_path):
         self.values, self.labels = values, labels
+        self.x_stand, self.y_stand = load_scalers(scaler_path, name_symbol)
 
     def __len__(self):
         return len(self.values)
@@ -82,16 +127,18 @@ class AmaData(Dataset):
         label = self.labels[item]
         value_t = self.create_time(value)
         label_t = self.create_time(label)
-        value = x_stand.transform(value[:, 1:])
-        label = y_stand.transform(label[:, 1][:, None])
+        value = self.x_stand.transform(value[:, 1:])
+        label = self.y_stand.transform(label[:, 1][:, None])
         value = np.float32(value)
         label = np.float32(label)
         return value, label, value_t, label_t
 
-def train_model(name_data_file, train_x, train_y, val_x, val_y):
-    train_data = AmaData(train_x, train_y)
+def train_model(name_symbol, train_x, train_y, val_x, val_y):
+
+    scaler_path = path_training_data
+    train_data = AmaData(train_x, train_y, name_symbol=name_symbol, scaler_path=scaler_path)
     train_data = DataLoader(train_data, shuffle=True, batch_size=batch_size)
-    val_data = AmaData(val_x, val_y)
+    val_data = AmaData(val_x, val_y, name_symbol=name_symbol, scaler_path=scaler_path)
     val_data = DataLoader(val_data, shuffle=True, batch_size=batch_size)
 
     model = Informer()
@@ -136,7 +183,7 @@ def train_model(name_data_file, train_x, train_y, val_x, val_y):
             best_val_loss = val_loss
             patience_counter = 0
             # Save the model if it has the best validation loss so far
-            save_path = model_save_path + f'model_{name_data_file}.pth'
+            save_path = model_save_path + f'model_{name_symbol}.pth'
             torch.save(model.state_dict(), save_path)
             print(f"Model saved to {save_path}")
         else:
@@ -147,12 +194,14 @@ def train_model(name_data_file, train_x, train_y, val_x, val_y):
 
     print("Training Complete.")
 
-def infer_model(name_data_file, oos_x, oos_y):
-    oos_data = AmaData(oos_x, oos_y)
+def infer_model(name_symbol, oos_x, oos_y):
+
+    scaler_path = path_training_data
+    oos_data = AmaData(oos_x, oos_y, name_symbol=name_symbol, scaler_path=scaler_path)
     oos_data = DataLoader(oos_data, shuffle=False, batch_size=batch_size)
 
     model = Informer()
-    model.load_state_dict(torch.load(model_save_path + f'model_{name_data_file}.pth'))
+    model.load_state_dict(torch.load(model_save_path + f'model_{name_symbol}.pth'))
     model.to(device)
 
     loss_fc = nn.MSELoss()
@@ -182,6 +231,7 @@ def infer_model(name_data_file, oos_x, oos_y):
 
             # Calculate the differences for binary trend prediction and differences
             for i in range(x.size(0)):
+
                 # Last known price from the decoder initializer
                 last_known_price = y[i, pre_len-1, 0].cpu().numpy()
                 last_known_price_inv = y_stand.inverse_transform(last_known_price.reshape(-1, 1)).item()
@@ -211,7 +261,7 @@ def infer_model(name_data_file, oos_x, oos_y):
     plt.xlabel('Actual Price Difference')
     plt.ylabel('Predicted Price Difference')
     plt.title('Scatter Plot of Actual vs. Predicted Price Differences')
-    plt.savefig(f"results\\Diff_{name_data_file}.png")
+    plt.savefig(f"results\\Diff_{name_symbol}.png")
 
     # Confusion matrix for the trend prediction
     cm = confusion_matrix(actual_trends, predicted_trends)
@@ -220,37 +270,30 @@ def infer_model(name_data_file, oos_x, oos_y):
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm_df, annot=True, fmt='d', cmap='Blues')
     plt.title('Confusion Matrix for Trend Prediction')
-    plt.savefig(f"results\\CM_{name_data_file}.png")
+    plt.savefig(f"results\\CM_{name_symbol}.png")
 
     # Print classification report
     print(classification_report(actual_trends, predicted_trends, target_names=['Down', 'Up']))
 
-    # # Convert lists of actual and predicted values to numpy arrays for easier handling
-    # actuals = np.concatenate(actuals, axis=0)
-    # predictions = np.concatenate(predictions, axis=0)
-    #
-    # # Scatter plot for the actual prices and predicted prices
-    # plt.figure(figsize=(12, 6))
-    # plt.scatter(actuals[:, 0], predictions[:, 0], alpha=0.6)
-    # plt.xlabel('Actual Prices')
-    # plt.ylabel('Predicted Prices')
-    # plt.title('Scatter Plot of Actual vs. Predicted Prices')
-    # plt.savefig(f"results\\Price_{name_data_file}_{pd.Timestamp.now().date()}.png")
-    #
 
 if __name__ == '__main__':
 
     # Import the list of symbols for US stock and crypto
-    from config import crypto_symbols
+    from config import us_stock_symbols
 
     # Train the US stocks
-    for name_data_file in crypto_symbols:
+    for name_symbol in us_stock_symbols:
 
         # Read the data
-        train_x, val_x, train_y, val_y, oos_x, oos_y = read_data(name_data_file)
+        train_x, val_x, train_y, val_y, oos_x, oos_y = read_data(name_symbol)
 
         # Uncomment the next line to train the model
-        train_model(name_data_file, train_x, train_y, val_x, val_y)
+        # train_model(name_symbol, train_x, train_y, val_x, val_y)
 
         # Run inference with the pre-trained model
-        infer_model(name_data_file, oos_x, oos_y)
+        infer_model(name_symbol, oos_x, oos_y)
+
+        # Run inference on the in-sample data
+        infer_model(name_symbol, train_x, train_y)
+
+
