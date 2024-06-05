@@ -30,17 +30,17 @@ path_training_data = 'datas/'
 model_save_path = 'trained_models/'  # Directory to save the model
 
 
-def save_scalers(x_scaler, y_scaler, path):
-    joblib.dump(x_scaler, os.path.join(path, 'x_scaler.pkl'))
-    joblib.dump(y_scaler, os.path.join(path, 'y_scaler.pkl'))
+def save_scalers(x_scaler, y_scaler, name_symbol, path):
+    joblib.dump(x_scaler, os.path.join(path, f'x_scaler_{name_symbol}.pkl'))
+    joblib.dump(y_scaler, os.path.join(path, f'y_scaler_{name_symbol}.pkl'))
 
-def load_scalers(path):
-    x_scaler = joblib.load(os.path.join(path, 'x_scaler.pkl'))
-    y_scaler = joblib.load(os.path.join(path, 'y_scaler.pkl'))
+def load_scalers(path, name_symbol):
+    x_scaler = joblib.load(os.path.join(path, f'x_scaler_{name_symbol}.pkl'))
+    y_scaler = joblib.load(os.path.join(path, f'y_scaler_{name_symbol}.pkl'))
     return x_scaler, y_scaler
 
 
-def save_oos_data(oos_x, oos_y, name_data_file, save_directory):
+def save_oos_data(oos_x, oos_y, name_symbol, save_directory):
 
     # Create the directory if it does not exist
     if not os.path.exists(save_directory):
@@ -56,14 +56,12 @@ def save_oos_data(oos_x, oos_y, name_data_file, save_directory):
                                    columns=['Open', 'Close'])  # Adjust columns based on your specific structure
 
         # Save the DataFrame to a CSV file
-        file_name_x = os.path.join(save_directory, f"oos_x_{name_data_file}_{i}.csv")
-        sample_x_df.to_csv(file_name_x, index=False)
-
-        file_name_y = os.path.join(save_directory, f"oos_y_{name_data_file}_{i}.csv")
-        sample_y_df.to_csv(file_name_y, index=False)
-
-
-        print(f"Saved: {file_name_x}")
+        # file_name_x = os.path.join(save_directory, f"oos_x_{name_symbol}_{i}.csv")
+        # sample_x_df.to_csv(file_name_x, index=False)
+        #
+        # file_name_y = os.path.join(save_directory, f"oos_y_{name_symbol}_{i}.csv")
+        # sample_y_df.to_csv(file_name_y, index=False)
+        # print(f"Saved: {file_name_x}")
 
 def create_data(datas):
     values = []
@@ -77,9 +75,9 @@ def create_data(datas):
         labels.append(label)
     return values, labels
 
-def read_data(name_data_file):
+def read_data(name_symbol):
 
-    datas = pd.read_csv(f"{path_training_data}\\{name_data_file}.csv")
+    datas = pd.read_csv(f"{path_training_data}\\{name_symbol}.csv")
 
     # Process and split data as before
     datas = datas[["Date", "Open", "High", "Low", "Close", "Volume"]]
@@ -91,7 +89,7 @@ def read_data(name_data_file):
     values, labels = create_data(datas)
 
     # Save the scalers
-    save_scalers(x_stand, y_stand, path_training_data)
+    save_scalers(x_stand, y_stand, name_symbol, path_training_data)
 
     # Split off the OOS test set first
     train_val_x, oos_x, train_val_y, oos_y = train_test_split(values, labels, test_size=test_size)
@@ -103,14 +101,14 @@ def read_data(name_data_file):
     oos_save_directory = os.path.join(path_training_data, 'oos_data')
 
     # Save OOS data to the new directory
-    save_oos_data(oos_x, oos_y, name_data_file, oos_save_directory)
+    save_oos_data(oos_x, oos_y, name_symbol, oos_save_directory)
 
     return train_x, val_x, train_y, val_y, oos_x, oos_y
 
 class AmaData(Dataset):
-    def __init__(self, values, labels, scaler_path):
+    def __init__(self, values, labels, name_symbol, scaler_path):
         self.values, self.labels = values, labels
-        self.x_stand, self.y_stand = load_scalers(scaler_path)
+        self.x_stand, self.y_stand = load_scalers(scaler_path, name_symbol)
 
     def __len__(self):
         return len(self.values)
@@ -135,11 +133,11 @@ class AmaData(Dataset):
         label = np.float32(label)
         return value, label, value_t, label_t
 
-def train_model(name_data_file, train_x, train_y, val_x, val_y):
+def train_model(name_symbol, train_x, train_y, val_x, val_y):
     scaler_path = path_training_data
-    train_data = AmaData(train_x, train_y, scaler_path)
+    train_data = AmaData(train_x, train_y, name_symbol=name_symbol, scaler_path=scaler_path)
     train_data = DataLoader(train_data, shuffle=True, batch_size=batch_size)
-    val_data = AmaData(val_x, val_y, scaler_path)
+    val_data = AmaData(val_x, val_y, name_symbol=name_symbol, scaler_path=scaler_path)
     val_data = DataLoader(val_data, shuffle=True, batch_size=batch_size)
 
     model = Informer()
@@ -184,7 +182,7 @@ def train_model(name_data_file, train_x, train_y, val_x, val_y):
             best_val_loss = val_loss
             patience_counter = 0
             # Save the model if it has the best validation loss so far
-            save_path = model_save_path + f'model_{name_data_file}.pth'
+            save_path = model_save_path + f'model_{name_symbol}.pth'
             torch.save(model.state_dict(), save_path)
             print(f"Model saved to {save_path}")
         else:
@@ -195,13 +193,13 @@ def train_model(name_data_file, train_x, train_y, val_x, val_y):
 
     print("Training Complete.")
 
-def infer_model(name_data_file, oos_x, oos_y):
+def infer_model(name_symbol, oos_x, oos_y):
     scaler_path = path_training_data
-    oos_data = AmaData(oos_x, oos_y, scaler_path)
+    oos_data = AmaData(oos_x, oos_y, name_symbol=name_symbol, scaler_path=scaler_path)
     oos_data = DataLoader(oos_data, shuffle=False, batch_size=batch_size)
 
     model = Informer()
-    model.load_state_dict(torch.load(model_save_path + f'model_{name_data_file}.pth'))
+    model.load_state_dict(torch.load(model_save_path + f'model_{name_symbol}.pth'))
     model.to(device)
 
     loss_fc = nn.MSELoss()
@@ -260,7 +258,7 @@ def infer_model(name_data_file, oos_x, oos_y):
     plt.xlabel('Actual Price Difference')
     plt.ylabel('Predicted Price Difference')
     plt.title('Scatter Plot of Actual vs. Predicted Price Differences')
-    plt.savefig(f"results\\Diff_{name_data_file}.png")
+    plt.savefig(f"results\\Diff_{name_symbol}.png")
 
     # Confusion matrix for the trend prediction
     cm = confusion_matrix(actual_trends, predicted_trends)
@@ -269,7 +267,7 @@ def infer_model(name_data_file, oos_x, oos_y):
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm_df, annot=True, fmt='d', cmap='Blues')
     plt.title('Confusion Matrix for Trend Prediction')
-    plt.savefig(f"results\\CM_{name_data_file}.png")
+    plt.savefig(f"results\\CM_{name_symbol}.png")
 
     # Print classification report
     print(classification_report(actual_trends, predicted_trends, target_names=['Down', 'Up']))
@@ -281,13 +279,13 @@ if __name__ == '__main__':
     from config import us_stock_symbols
 
     # Train the US stocks
-    for name_data_file in us_stock_symbols:
+    for name_symbol in us_stock_symbols:
 
         # Read the data
-        train_x, val_x, train_y, val_y, oos_x, oos_y = read_data(name_data_file)
+        train_x, val_x, train_y, val_y, oos_x, oos_y = read_data(name_symbol)
 
         # Uncomment the next line to train the model
-        train_model(name_data_file, train_x, train_y, val_x, val_y)
+        train_model(name_symbol, train_x, train_y, val_x, val_y)
 
         # Run inference with the pre-trained model
-        infer_model(name_data_file, oos_x, oos_y)
+        infer_model(name_symbol, oos_x, oos_y)
