@@ -3,6 +3,8 @@ Main function for daily run
 """
 import torch
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from sklearn.preprocessing import StandardScaler
@@ -12,6 +14,9 @@ import yfinance as yf
 from models import Informer
 from config import symbols_daily_run
 from datetime import datetime, timedelta
+import plotly.graph_objects as go
+
+from pandas.tseries.holiday import USFederalHolidayCalendar
 
 
 x_stand = StandardScaler()
@@ -59,7 +64,6 @@ def load_scalers(path, name_symbol):
     return x_scaler, y_scaler
 
 
-
 def read_data(name_symbol):
 
     # get today's date in string format "YYYY-MM-DD"
@@ -91,30 +95,48 @@ def read_data(name_symbol):
     ys = datas.values[:, 4]
     x_stand.fit(xs)
     y_stand.fit(ys[:, None])
-    values, labels, labels_fake = create_data(datas)
-    oos_x, oos_y, oos_y_fake = values, labels, labels_fake
+    values, labels_fake = create_data_no_label(datas)
+    oos_x, oos_y_fake = values, labels_fake
 
-    return oos_x, oos_y, oos_y_fake
+    return oos_x, oos_y_fake
 
 
-def create_data(datas):
+def create_data_no_label(datas):
     values = []
     labels = []
     labels_fake = []
     lens = datas.shape[0]
     datas = datas.values
-    for index in range(0, lens - pre_len - s_len + 1):
-        value = datas[index:index + s_len, [0, 1, 2, 3, 4]]
-        label = datas[index + s_len - pre_len:index + s_len + pre_len, [0, 4]]
+    for index in range(0, lens - s_len + 1):
 
-        # create a fake label that has zeroes in the last five rows, colume 2 only
-        fake_label = label.copy()
-        fake_label[-pre_len:, 1] = 0
+        # get the input value, 64 rows up to today
+        value = datas[index:index + s_len, [0, 1, 2, 3, 4]]
+
+        # get the label pt1, 5 rows for the last five days including today
+        label_known = datas[index + s_len - pre_len:index + s_len, [0, 4]]
+
+        # generate future trading days starting from the last known date
+        last_date = pd.to_datetime(label_known[-1, 0])
+
+        # Define custom business day with US Federal holidays
+        us_bd = pd.offsets.CustomBusinessDay(calendar=USFederalHolidayCalendar())
+
+        future_dates = [last_date + i * us_bd for i in range(1, pre_len + 1)]
+
+        # create the label pt 2, with future dates and Close price as zero
+        label_fake = np.zeros((pre_len, 2), dtype=object)
+        for i, future_date in enumerate(future_dates):
+            label_fake[i, 0] = future_date.strftime('%Y-%m-%d')
+            label_fake[i, 1] = 0  # Close price is set to zero
+
+        # merge the label pt1 and pt2 to generate the fake_label
+        fake_label = np.vstack([label_known, label_fake])
+
+        # append the values, labels and fake_labels to the list
         values.append(value)
-        labels.append(label)
         labels_fake.append(fake_label)
 
-    return values, labels, labels_fake
+    return values, labels_fake
 
 
 def infer_model(name_symbol, oos_x, oos_y):
@@ -156,12 +178,8 @@ def infer_model(name_symbol, oos_x, oos_y):
                 # Last predicted price
                 last_predicted_price = predictions_batch_inv[i, -1, 0]
 
-                # Last actual price from the label
-                # last_actual_price = actuals_batch_inv[i, -1, 0]
-
                 # Calculate the differences
                 predicted_diff = last_predicted_price - last_known_price_inv
-                # actual_diff = last_actual_price - last_known_price_inv
 
                 # Save the actual differences and binary trends
                 predicted_diffs.append(predicted_diff)
@@ -172,53 +190,57 @@ def infer_model(name_symbol, oos_x, oos_y):
 
 if __name__ == "__main__":
 
+    # get today's date in string format "YYYY-MM-DD"
+    test_date = datetime.now().strftime("%Y-%m-%d")
 
     # loop through the symbols_daily_run list and process each symbol
     for name_symbol in symbols_daily_run:
 
+        print(f"Processing {name_symbol}...")
+
         # Read the data
-        oos_x, oos_y, oos_y_fake = read_data(name_symbol)
+        oos_x, oos_y_fake = read_data(name_symbol)
 
         # Run inference with the pre-trained model
-        oos_y_pred_with_fake_oos_y = infer_model(name_symbol, oos_x, oos_y_fake)
-        # oos_y_pred_with_real_oos_y = infer_model(name_symbol, oos_x, oos_y)
-
-        # choose which oos_y_pred to use
-        oos_y_pred = oos_y_pred_with_fake_oos_y
-        # oos_y_pred = oos_y_pred_with_real_oos_y
+        oos_y_pred = infer_model(name_symbol, oos_x, oos_y_fake)
 
         # Flatten oos_y_pred for plotting
         oos_y_pred = np.array(oos_y_pred).flatten()
 
-        # Select the relevant portion of oos_y
-        actual_values = oos_y[0][-pre_len:, 1].astype(float)
+        # assign the predicted values to the last pre_l rows of the oos_y_fake
+        oos_y_fake[-1][-pre_len:, 1] = oos_y_pred
 
-        # add the last known price to the actual_values
-        last_known_price = oos_y[0][pre_len - 1, 1]
-        actual_values = np.append(last_known_price, actual_values)
+        # convert data to dataframe
+        df_oos_x = pd.DataFrame(oos_x[0])
+        df_oos_x.columns = ['Date', 'Open', 'High', 'Low', 'Close']
+        df_oos_x['Date'] = pd.to_datetime(df_oos_x['Date'])
+        df_oos_x[['Open', 'High', 'Low', 'Close']] = df_oos_x[['Open', 'High', 'Low', 'Close']].astype(float)
 
-        # add the last known price to the oos_y_pred
-        oos_y_pred = np.append(last_known_price, oos_y_pred)
+        df_oos_y = pd.DataFrame(oos_y_fake[0][-pre_len:])
+        df_oos_y.columns = ['Date', 'Close']
+        df_oos_y['Date'] = pd.to_datetime(df_oos_y['Date'])
+        df_oos_y['Close'] = df_oos_y['Close'].astype(float)
 
-        # Calculate the differences for binary trend prediction and differences
-        diffs_actual = actual_values[-1] - last_known_price
-        diffs_predicted = oos_y_pred[-1] - last_known_price
-        list_actual_diffs.append(diffs_actual)
-        list_predicted_diffs.append(diffs_predicted)
+        # Plot OHLC candlestick chart for df_oos_x
+        fig = go.Figure(data=[go.Candlestick(x=df_oos_x['Date'],
+                                             open=df_oos_x['Open'],
+                                             high=df_oos_x['High'],
+                                             low=df_oos_x['Low'],
+                                             close=df_oos_x['Close'],
+                                             name='OHLC')])
 
-        # Plot the actual and predicted values
-        plt.figure(figsize=(10, 6))
-        plt.plot(actual_values, label='Actual')
-        plt.plot(oos_y_pred, label='Predicted')
-        plt.xlabel('Time Step')
-        plt.ylabel('Close Price')
-        plt.title(f'{test_date} Actual vs. Predicted Close Price')
-        plt.legend()
+        # Plot line chart for df_oos_y
+        fig.add_trace(go.Scatter(x=df_oos_y['Date'], y=df_oos_y['Close'], mode='lines', name='Predicted Close'))
 
-        # Save the figure with the date as the name postfix
-        plt.savefig(f"results\\{name_symbol}_{test_date}.png")
-        # plt.show()
-        plt.close()
+        # Customize layout
+        fig.update_layout(title='',
+                          xaxis_title='',
+                          yaxis_title='Price',
+                          xaxis_rangeslider_visible=False,
+                          showlegend=False)
 
+        # Add a vertical line at the test_date
+        fig.add_vline(x=test_date, line_dash="dash", line_color="black")
 
-    print("Daily run complete!")
+        # save the iamge as a png file
+        fig.write_image(f"output/{name_symbol}_{test_date}.png")
