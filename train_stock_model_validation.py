@@ -25,7 +25,7 @@ batch_size = 32
 device = "cuda" if torch.cuda.is_available() else "cpu"
 lr = 5e-5
 epochs = 100
-patience = 10  # Early stopping patience
+patience = 5  # Early stopping patience
 path_training_data = 'datas/'
 model_save_path = 'trained_models/'  # Directory to save the model
 
@@ -288,12 +288,15 @@ if __name__ == '__main__':
         train_x, val_x, train_y, val_y, oos_x, oos_y = read_data(name_symbol)
 
         # Uncomment the next line to train the model
-        # train_model(name_symbol, train_x, train_y, val_x, val_y)
+        train_model(name_symbol, train_x, train_y, val_x, val_y)
 
         # Run inference with the pre-trained model
         infer_model(name_symbol, oos_x, oos_y)
 
-        # Run inference on the in-sample data
-        infer_model(name_symbol, train_x, train_y)
+        # # Run inference on the in-sample data
+        # infer_model(name_symbol, train_x, train_y)
+        #
+        # # Run inference on the in-sample data
+        # infer_model(name_symbol, val_x, val_y)
 
 
