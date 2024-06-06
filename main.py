@@ -242,5 +242,7 @@ if __name__ == "__main__":
         # Add a vertical line at the test_date
         fig.add_vline(x=test_date, line_dash="dash", line_color="black")
 
+        fig.update_layout(margin=dict(l=10, r=10, t=10, b=10))
+
         # save the iamge as a png file
         fig.write_image(f"output/{name_symbol}_{test_date}.png")
