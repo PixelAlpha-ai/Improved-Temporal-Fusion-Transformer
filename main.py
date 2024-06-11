@@ -64,13 +64,13 @@ def load_scalers(path, name_symbol):
     return x_scaler, y_scaler
 
 
-def read_data(name_symbol):
+def read_data(name_symbol, test_date):
 
-    # get today's date in string format "YYYY-MM-DD"
-    test_date = datetime.now().strftime("%Y-%m-%d")
+    # convert the test_date to datetime object
+    test_date_dt = datetime.strptime(test_date, "%Y-%m-%d")
 
-    # set start date to be 100 calendar days before end date
-    start_date = (datetime.now() - timedelta(days=360)).strftime("%Y-%m-%d")
+    # set start date to be 100 calendar days before test date
+    start_date = (test_date_dt - timedelta(days=360)).strftime("%Y-%m-%d")
 
     # Donwload the data
     datas = yf.download(name_symbol, start=start_date, interval="1d")
@@ -80,7 +80,7 @@ def read_data(name_symbol):
     datas['Date'] = datas['Date'].dt.strftime('%Y-%m-%d')
 
     # assert the data is latest
-    assert datas['Date'].iloc[-1] == test_date
+    # assert datas['Date'].iloc[-1] == test_date
 
     # find the idx of the test_date
     test_date_idx = datas[datas['Date'] == test_date].index[0]
@@ -90,7 +90,7 @@ def read_data(name_symbol):
 
     # Process the data
     datas = datas[["Date", "Open", "High", "Low", "Close", "Volume"]]
-    datas.fillna(0, inplace=True)
+    # datas.fillna(0, inplace=True)
     xs = datas.values[:, [1, 2, 3, 4]]
     ys = datas.values[:, 4]
     x_stand.fit(xs)
@@ -107,7 +107,10 @@ def create_data_no_label(datas):
     labels_fake = []
     lens = datas.shape[0]
     datas = datas.values
-    for index in range(0, lens - s_len + 1):
+
+    # for index in range(0, lens - s_len + 1):
+    # only run the last one valid data
+    for index in [lens - s_len]:
 
         # get the input value, 64 rows up to today
         value = datas[index:index + s_len, [0, 1, 2, 3, 4]]
@@ -192,6 +195,7 @@ if __name__ == "__main__":
 
     # get today's date in string format "YYYY-MM-DD"
     test_date = datetime.now().strftime("%Y-%m-%d")
+    test_date = '2024-04-15'
 
     # loop through the symbols_daily_run list and process each symbol
     for name_symbol in symbols_daily_run:
@@ -199,7 +203,7 @@ if __name__ == "__main__":
         print(f"Processing {name_symbol}...")
 
         # Read the data
-        oos_x, oos_y_fake = read_data(name_symbol)
+        oos_x, oos_y_fake = read_data(name_symbol, test_date)
 
         # Run inference with the pre-trained model
         oos_y_pred = infer_model(name_symbol, oos_x, oos_y_fake)
