@@ -198,7 +198,7 @@ if __name__ == "__main__":
 
     # get today's date in string format "YYYY-MM-DD"
     test_date = datetime.now().strftime("%Y-%m-%d")
-    test_date = '2024-04-15'
+    test_date = '2024-02-21'
 
     # loop through the symbols_daily_run list and process each symbol
     for name_symbol in symbols_daily_run:
