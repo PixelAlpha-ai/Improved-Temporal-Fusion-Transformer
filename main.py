@@ -73,13 +73,13 @@ def read_data(name_symbol, test_date):
     start_date = (test_date_dt - timedelta(days=360)).strftime("%Y-%m-%d")
 
     # Donwload the data
-    # datas = yf.download(name_symbol, start=start_date, interval="1d")
-    # datas.reset_index(inplace=True)
+    datas = yf.download(name_symbol, start=start_date, interval="1d")
+    datas.reset_index(inplace=True)
     # set the Date column to be in string format
-    # datas['Date'] = datas['Date'].dt.strftime('%Y-%m-%d')
+    datas['Date'] = datas['Date'].dt.strftime('%Y-%m-%d')
 
-    # temp - if no access to internet
-    datas = pd.read_csv(f'datas_test\\{name_symbol}.csv')
+    # # temp - if no access to internet
+    # datas = pd.read_csv(f'datas_test\\{name_symbol}.csv')
 
     # assert the data is latest
     # assert datas['Date'].iloc[-1] == test_date
@@ -198,7 +198,7 @@ if __name__ == "__main__":
 
     # get today's date in string format "YYYY-MM-DD"
     test_date = datetime.now().strftime("%Y-%m-%d")
-    test_date = '2024-02-21'
+    # test_date = '2024-06-11'
 
     # loop through the symbols_daily_run list and process each symbol
     for name_symbol in symbols_daily_run:
