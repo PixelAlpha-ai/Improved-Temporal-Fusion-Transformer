@@ -73,11 +73,13 @@ def read_data(name_symbol, test_date):
     start_date = (test_date_dt - timedelta(days=360)).strftime("%Y-%m-%d")
 
     # Donwload the data
-    datas = yf.download(name_symbol, start=start_date, interval="1d")
-    datas.reset_index(inplace=True)
-
+    # datas = yf.download(name_symbol, start=start_date, interval="1d")
+    # datas.reset_index(inplace=True)
     # set the Date column to be in string format
-    datas['Date'] = datas['Date'].dt.strftime('%Y-%m-%d')
+    # datas['Date'] = datas['Date'].dt.strftime('%Y-%m-%d')
+
+    # temp - if no access to internet
+    datas = pd.read_csv(f'datas_test\\{name_symbol}.csv')
 
     # assert the data is latest
     # assert datas['Date'].iloc[-1] == test_date
@@ -86,7 +88,8 @@ def read_data(name_symbol, test_date):
     test_date_idx = datas[datas['Date'] == test_date].index[0]
 
     # keep the s_len rows (including the test_date) and pre_len more rows
-    datas = datas.iloc[test_date_idx - s_len + 1:test_date_idx + pre_len + 1]
+    # datas = datas.iloc[test_date_idx - s_len + 1:test_date_idx + pre_len + 1]
+    datas = datas.iloc[test_date_idx - s_len - pre_len + 1: test_date_idx + 1]
 
     # Process the data
     datas = datas[["Date", "Open", "High", "Low", "Close", "Volume"]]
