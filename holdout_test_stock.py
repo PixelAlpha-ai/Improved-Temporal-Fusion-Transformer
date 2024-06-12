@@ -30,7 +30,6 @@ path_results_summary = 'results_summary/'  # Directory to save the summary resul
 model_save_path = 'trained_models/'  # Directory to save the model
 
 
-
 def load_scalers(path, name_symbol):
     x_scaler = joblib.load(os.path.join(path, f'x_scaler_{name_symbol}.pkl'))
     y_scaler = joblib.load(os.path.join(path, f'y_scaler_{name_symbol}.pkl'))
@@ -252,16 +251,34 @@ if __name__ == '__main__':
         ### postprocessing
 
         # Scatter plot for the differences, set the x and y limits symmetric around zero
-        max_x = max(max(list_actual_diffs), max((list_predicted_diffs)))
-        min_x = min(min(list_actual_diffs), min((list_predicted_diffs)))
-        max_abs = max(abs(max_x), abs(min_x))
+        # max_x = max(max(list_actual_diffs), max((list_predicted_diffs)))
+        # min_x = min(min(list_actual_diffs), min((list_predicted_diffs)))
+        # max_abs = max(abs(max_x), abs(min_x))
 
-        plt.figure(figsize=(10, 6))
-        plt.scatter(list_actual_diffs, list_predicted_diffs)
+        # add a fitted line and add R square plot
+        sns.regplot(x=list_actual_diffs, y=list_predicted_diffs)
         plt.xlabel('Actual Price Difference')
         plt.ylabel('Predicted Price Difference')
         plt.title(f'{test_date}_{name_symbol} Actual vs. Predicted Price Differences, {pre_len} days')
-        plt.xlim(-max_abs, max_abs)
-        plt.ylim(-max_abs, max_abs)
-        plt.savefig(f"{path_results_summary}\\Diff_{name_symbol}.png")
+
+        # calculate the R square
+        x = np.array(list_actual_diffs)
+        y = np.array(list_predicted_diffs)
+        correlation_matrix = np.corrcoef(x, y)
+        correlation_xy = correlation_matrix[0, 1]
+        r_squared = correlation_xy ** 2
+        print(f"R squared for {name_symbol}: {r_squared}")
+
+        # plt.xlim(-max_abs, max_abs)
+        # plt.ylim(-max_abs, max_abs)
+        plt.savefig(f"{path_results_summary}\\Diff_{name_symbol}_R2{r_squared}.png")
         plt.show()
+
+        # Calculate the confusion matrix and classification report
+        # cm = confusion_matrix(list_actual_diffs, list_predicted_diffs)
+        # cr = classification_report(list_actual_diffs, list_predicted_diffs)
+        # print(f"Confusion Matrix for {name_symbol}:")
+        # print(cm)
+        # print(f"Classification Report for {name_symbol}:")
+        # print(cr)
+

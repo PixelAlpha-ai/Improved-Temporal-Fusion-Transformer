@@ -27,6 +27,7 @@ lr = 5e-5
 epochs = 100
 patience = 5  # Early stopping patience
 path_training_data = 'datas/'
+path_results_summary = 'results_summary/'
 model_save_path = 'trained_models/'  # Directory to save the model
 
 
@@ -258,19 +259,21 @@ def infer_model(name_symbol, oos_x, oos_y):
     # Scatter plot for the differences
     plt.figure(figsize=(10, 6))
     plt.scatter(actual_diffs, predicted_diffs)
+    # calcualte R2
+    r2 = np.corrcoef(actual_diffs, predicted_diffs)[0, 1]
     plt.xlabel('Actual Price Difference')
     plt.ylabel('Predicted Price Difference')
     plt.title('Scatter Plot of Actual vs. Predicted Price Differences')
-    plt.savefig(f"results\\Diff_{name_symbol}.png")
+    plt.savefig(f"{path_results_summary}\\Diff_{name_symbol}_R2{r2}.png")
 
     # Confusion matrix for the trend prediction
     cm = confusion_matrix(actual_trends, predicted_trends)
     cm_df = pd.DataFrame(cm, index=['Down', 'Up'], columns=['Predicted Down', 'Predicted Up'])
-
+    accuracy = np.trace(cm) / np.sum(cm)
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm_df, annot=True, fmt='d', cmap='Blues')
     plt.title('Confusion Matrix for Trend Prediction')
-    plt.savefig(f"results\\CM_{name_symbol}.png")
+    plt.savefig(f"{path_results_summary}\\CM_{name_symbol}_ACC{accuracy}.png")
 
     # Print classification report
     print(classification_report(actual_trends, predicted_trends, target_names=['Down', 'Up']))
@@ -279,10 +282,10 @@ def infer_model(name_symbol, oos_x, oos_y):
 if __name__ == '__main__':
 
     # Import the list of symbols for US stock and crypto
-    from config import us_stock_symbols
+    from config import us_stock_symbols, crypto_symbols, symbols_daily_run
 
     # Train the US stocks
-    for name_symbol in us_stock_symbols:
+    for name_symbol in crypto_symbols:
 
         # Read the data
         train_x, val_x, train_y, val_y, oos_x, oos_y = read_data(name_symbol)
