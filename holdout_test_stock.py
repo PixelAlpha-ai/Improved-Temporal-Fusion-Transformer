@@ -178,15 +178,16 @@ def infer_model(name_symbol, oos_x, oos_y):
 if __name__ == '__main__':
 
     # generate a list of all dates, in string format, from test_date_start to test_date_end
-    test_date_start = '2024-04-01'
+    test_date_start = '2023-02-01'
     test_date_end = '2024-05-31'
     list_test_dates = pd.date_range(start=test_date_start, end=test_date_end).strftime('%Y-%m-%d').tolist()
 
     # Import the list of symbols for US stock and crypto
-    from config import us_stock_symbols
+    from config import us_stock_symbols, crypto_symbols
 
     # Train the US stocks
-    for name_symbol in us_stock_symbols:
+    # for name_symbol in us_stock_symbols:
+    for name_symbol in crypto_symbols:
 
         # create a list to save data for 2D scatter plot of predicted price change vs actual price change
         list_actual_diffs = []
