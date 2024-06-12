@@ -25,6 +25,8 @@ pre_len = 5
 device = "cuda" if torch.cuda.is_available() else "cpu"
 path_training_data = 'datas/'
 path_testing_data = 'datas_test/'
+path_results_raw = 'results_raw/'  # Directory to save the raw results
+path_results_summary = 'results_summary/'  # Directory to save the summary results
 model_save_path = 'trained_models/'  # Directory to save the model
 
 
@@ -183,11 +185,12 @@ if __name__ == '__main__':
     list_test_dates = pd.date_range(start=test_date_start, end=test_date_end).strftime('%Y-%m-%d').tolist()
 
     # Import the list of symbols for US stock and crypto
-    from config import us_stock_symbols, crypto_symbols
+    from config import us_stock_symbols, crypto_symbols, symbols_daily_run
 
     # Train the US stocks
     # for name_symbol in us_stock_symbols:
-    for name_symbol in crypto_symbols:
+    # for name_symbol in crypto_symbols:
+    for name_symbol in symbols_daily_run:
 
         # create a list to save data for 2D scatter plot of predicted price change vs actual price change
         list_actual_diffs = []
@@ -238,7 +241,7 @@ if __name__ == '__main__':
                 plt.legend()
 
                 # Save the figure with the date as the name postfix
-                plt.savefig(f"results\\{name_symbol}_{test_date}.png")
+                plt.savefig(f"{path_results_raw}\\{name_symbol}_{test_date}.png")
                 # plt.show()
                 plt.close()
 
@@ -260,5 +263,5 @@ if __name__ == '__main__':
         plt.title(f'{test_date}_{name_symbol} Actual vs. Predicted Price Differences, {pre_len} days')
         plt.xlim(-max_abs, max_abs)
         plt.ylim(-max_abs, max_abs)
-        plt.savefig(f"results\\Diff_{name_symbol}.png")
+        plt.savefig(f"{path_results_summary}\\Diff_{name_symbol}.png")
         plt.show()
